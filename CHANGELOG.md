@@ -2,6 +2,18 @@
 
 All notable changes to sovereign-mcp are documented here.
 
+## [1.2.0] — 2026-03-21
+
+### LLM Social Engineering Detection (Optional)
+
+- **NEW: `social_engineering_detector.py`** — Two-model consensus social engineering detection. Two independent LLMs classify input text, classifications compared deterministically. Blocks attacks that bypass regex patterns.
+- Categories: `authority_impersonation`, `urgency_manipulation`, `trust_exploitation`, `information_extraction`, `emotional_manipulation`
+- Fail-safe on model disagreement or error (defaults to block)
+- Optional — skipped if no model providers configured
+- Wired into `OutputGate` as pre-Layer-A input scan
+- New sidecar endpoint: `POST /scan-social-engineering`
+- Live tested: 5/5 with Gemini 2.0 Flash + DeepSeek V3.2 Cloud (3 attacks blocked, 2 benign passed)
+
 ## [1.1.1] — 2026-03-21
 
 ### Integrity Fix

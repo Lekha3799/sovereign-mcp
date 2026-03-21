@@ -41,6 +41,7 @@ This document describes **every module, every class, every function, and every d
 31. [Conscience (`conscience.py`)](#31-conscience)
 32. [SIEM Logger (`siem_logger.py`)](#32-siem-logger)
 33. [Sidecar Proxy (`sidecar.py`)](#33-sidecar-proxy)
+34. [Social Engineering Detector (`social_engineering_detector.py`)](#34-social-engineering-detector)
 
 ---
 
@@ -1157,6 +1158,52 @@ FastAPI provides Swagger UI at `/docs` and ReDoc at `/redoc` automatically.
 
 ---
 
+## 34. Social Engineering Detector
+
+**File:** `sovereign_mcp/social_engineering_detector.py` (~265 lines)
+
+Optional LLM-based social engineering detection using two-model consensus. Closes the gap where novel social engineering attacks bypass regex-based pattern matching by using semantic understanding from two independent LLMs.
+
+### How It Works
+
+Two independent LLMs classify input text using a frozen classification schema. The `is_social_engineering` boolean from both models is compared directly. If both agree the input is an attack, it is blocked. If both agree it is safe, it passes. If they disagree or either errors, the input is blocked (fail-safe).
+
+The frozen classification schema requests three fields from each model:
+- `is_social_engineering` (boolean) — the primary decision field
+- `category` (enum: `authority_impersonation`, `urgency_manipulation`, `trust_exploitation`, `information_extraction`, `emotional_manipulation`, `none`)
+- `confidence` (enum: `high`, `medium`, `low`)
+
+### `SocialEngineeringDetector` Class
+
+**`__init__(model_a, model_b)`** — Takes two `ModelProvider` instances (same base class as Layer C consensus). Enforces model diversity (different `model_id` required) and `temperature=0` on both. Same validation as `ConsensusVerifier`.
+
+**`scan(text)`** — The main entry point:
+
+1. Constructs a classification prompt with the input text
+2. Model A classifies → `output_a`
+3. Model B classifies → `output_b`
+4. Extract `is_social_engineering` boolean from both
+5. If both say attack → **blocked** (uses Model A's category)
+6. If both say safe → **passed**
+7. If they disagree → **blocked** (fail-safe)
+8. If either model errors → **blocked** (fail-safe)
+
+Full canonical hashes of both outputs are computed for the audit trail, but the decision is based on the boolean classification agreement, not the full hash. This prevents false positives when models agree on classification but differ on confidence or category wording.
+
+Returns an immutable `ScanResult`.
+
+### `ScanResult`
+
+Immutable result object (`__slots__` + `object.__setattr__()` + `__delattr__()` override). Contains: `safe` (bool), `category`, `confidence`, `hash_a`, `hash_b`, `consensus` (match status string), `reason`, `latency_ms`.
+
+### Integration Points
+
+- **OutputGate**: Optional `social_engineering_detector` parameter. Scans string values from `input_params` before Layer A. Layer name: `social_engineering`.
+- **Sidecar**: `POST /scan-social-engineering` endpoint. Returns `safe=true` if no models configured.
+- **Standalone**: Can be used independently via `detector.scan(text)`.
+
+---
+
 ## Architecture Summary
 
 The entire codebase follows a consistent set of design principles:
@@ -1181,4 +1228,4 @@ The entire codebase follows a consistent set of design principles:
 
 ---
 
-*Total codebase: 33 modules, ~7,800 lines of Python + 418 lines of C. Core package: zero external dependencies (stdlib only). Sidecar: optional FastAPI + uvicorn.*
+*Total codebase: 34 modules, ~8,100 lines of Python + 418 lines of C. Core package: zero external dependencies (stdlib only). Sidecar: optional FastAPI + uvicorn.*

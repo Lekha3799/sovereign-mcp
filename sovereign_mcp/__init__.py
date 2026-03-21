@@ -57,6 +57,7 @@ from sovereign_mcp.adaptive_shield import AdaptiveShield, ATTACK_CATEGORIES
 from sovereign_mcp.truth_guard import TruthGuard, DEFAULT_VERIFICATION_TOOLS
 from sovereign_mcp.conscience import Conscience
 from sovereign_mcp.siem_logger import SIEMLogger, Severity
+from sovereign_mcp.social_engineering_detector import SocialEngineeringDetector
 
 __all__ = [
     # Core
@@ -109,5 +110,7 @@ __all__ = [
     "Conscience",
     # SIEM Logger (Enterprise Logging)
     "SIEMLogger", "Severity",
+    # Social Engineering Detection (LLM Consensus, Optional)
+    "SocialEngineeringDetector",
 ]
-__version__ = "1.1.1"
+__version__ = "1.2.0"

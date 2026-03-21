@@ -41,7 +41,8 @@ class OutputGate:
                  value_checker=None, approval_checker=None, audit_log=None,
                  rate_limiter=None, consensus_cache=None,
                  identity_checker=None, domain_checker=None,
-                 input_sanitizer=None, incident_responder=None):
+                 input_sanitizer=None, incident_responder=None,
+                 social_engineering_detector=None):
         """
         Args:
             frozen_registry: FrozenRegistry from ToolRegistry.freeze().
@@ -55,6 +56,7 @@ class OutputGate:
             domain_checker: DomainChecker instance (optional, Check 5).
             input_sanitizer: InputSanitizer class (optional, Check 12).
             incident_responder: IncidentResponder instance (optional, Stage 4).
+            social_engineering_detector: SocialEngineeringDetector instance (optional).
         """
         self._registry = frozen_registry
         self._consensus = consensus_verifier
@@ -67,6 +69,7 @@ class OutputGate:
         self._domain_checker = domain_checker
         self._input_sanitizer = input_sanitizer
         self._incident_responder = incident_responder
+        self._social_engineering_detector = social_engineering_detector
 
     def verify(self, tool_name, tool_output, input_params=None):
         """
@@ -163,6 +166,27 @@ class OutputGate:
                 )
                 self._log_incident(tool_name, result, "HIGH")
                 return result
+
+        # --- Social Engineering Detection (LLM Consensus, Optional) ---
+        if self._social_engineering_detector and input_params is not None:
+            # Scan input text fields for social engineering
+            text_to_scan = " ".join(
+                str(v) for v in input_params.values() if isinstance(v, str)
+            )
+            if text_to_scan.strip():
+                se_result = self._social_engineering_detector.scan(text_to_scan)
+                if not se_result.safe:
+                    elapsed = (time.time() - start) * 1000
+                    result = GateResult(
+                        accepted=False,
+                        layer="social_engineering",
+                        reason=se_result.reason,
+                        latency_ms=elapsed,
+                        layers_passed=layers_passed,
+                    )
+                    self._log_incident(tool_name, result, "HIGH")
+                    return result
+                layers_passed.append("SE")
 
         # --- Layer A: Schema Validation ---
         if isinstance(tool_output, dict):

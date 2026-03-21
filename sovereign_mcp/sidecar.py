@@ -18,6 +18,7 @@ Endpoints:
     POST /check-content    Toxic/harmful content check
     POST /verify-output    Schema validation for tool outputs
     POST /evaluate-ethics  Ethical action evaluation
+    POST /scan-social-engineering  LLM consensus social engineering detection
 
 Patent: Sovereign Shield Patent 20 (MCP Security Architecture)
 """
@@ -102,6 +103,7 @@ def health():
             "ContentSafety",
             "SchemaValidator",
             "Conscience",
+            "SocialEngineeringDetector (optional, requires model providers)",
         ],
     }
 
@@ -204,6 +206,43 @@ def evaluate_ethics(req: EthicsRequest):
     return ScanResult(
         safe=approved,
         reason=reason,
+        latency_ms=ms,
+    )
+
+
+# Social engineering detector instance (None until configured)
+_se_detector = None
+
+
+def configure_social_engineering(model_a, model_b):
+    """Configure the LLM-based social engineering detector with two model providers."""
+    global _se_detector
+    from sovereign_mcp.social_engineering_detector import SocialEngineeringDetector
+    _se_detector = SocialEngineeringDetector(model_a, model_b)
+    logger.info("[Sidecar] Social engineering detector configured.")
+
+
+@app.post("/scan-social-engineering", response_model=ScanResult)
+def scan_social_engineering(req: TextRequest):
+    """Scan text for social engineering using LLM dual-model consensus."""
+    if _se_detector is None:
+        return ScanResult(
+            safe=True,
+            reason="LLM social engineering detection not configured (optional). "
+                   "Call configure_social_engineering() with two model providers to enable.",
+            latency_ms=0.0,
+        )
+    t0 = time.time()
+    result = _se_detector.scan(req.text)
+    ms = round((time.time() - t0) * 1000, 2)
+    return ScanResult(
+        safe=result.safe,
+        reason=result.reason,
+        details={
+            "category": result.category,
+            "confidence": result.confidence,
+            "consensus": result.consensus,
+        },
         latency_ms=ms,
     )
 
