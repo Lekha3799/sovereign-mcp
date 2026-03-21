@@ -1,9 +1,9 @@
 {
-  "aggregate_hash": "2659801fec3b12f6a3e3eb942d4a769092c346d5e89c10077180d7a984c72c74",
-  "file_count": 32,
+  "aggregate_hash": "7a44400987b706f43a2e52975b76f05833d48569106349fd202c226b8e15fc08",
+  "file_count": 33,
   "files": {
     "__init__.py": {
-      "sha256": "534c8138e4c8d454009ef398fd5d5efab68453c7e09dbd518bdc005fee2b88dc",
+      "sha256": "8babf24b7b5a631f5d0ac76d76e39b16a2d2d35c1a46c7006247642fe4b57b97",
       "size": 4863
     },
     "adaptive_shield.py": {
@@ -105,6 +105,10 @@
     "schema_validator.py": {
       "sha256": "fff10aaa54d1732b081a716ba607b325f01f0adf722842cc814edc58fc86b941",
       "size": 9158
+    },
+    "sidecar.py": {
+      "sha256": "a367f126c11fd7410c75f49c7fcf9f212e6450d26d1b19ed95bb44c60a9aeac0",
+      "size": 7986
     },
     "siem_logger.py": {
       "sha256": "1b5ed6458e90ce44dee1475fab1fb2954ddc67883862167b4484cea537893881",

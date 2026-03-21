@@ -2,6 +2,24 @@
 
 All notable changes to sovereign-mcp are documented here.
 
+## [1.1.1] — 2026-03-21
+
+### Integrity Fix
+
+- Regenerated integrity lockfile to include `sidecar.py` (33 files sealed). The v1.1.0 PyPI package had a stale lockfile that would raise `IntegrityViolation` on import.
+- Documentation lint cleanup across `API_REFERENCE.md` and `SECURITY.md`
+
+## [1.1.0] — 2026-03-21
+
+### Sidecar Proxy — Language-Agnostic Integration
+
+- **NEW: `sidecar.py`** — FastAPI-based REST proxy server exposing all security modules as HTTP endpoints. Any MCP server in any language can integrate via simple HTTP calls.
+- 7 endpoints: `/health`, `/filter-input`, `/scan-deception`, `/scan-pii`, `/check-content`, `/verify-output`, `/evaluate-ethics`
+- Optional dependency group: `pip install sovereign-mcp[sidecar]`
+- CLI entry point: `python -m sovereign_mcp.sidecar --port 9090`
+- Auto-generated API docs at `/docs`
+- README updated with sidecar documentation, endpoint table, and usage examples
+
 ## [1.0.0] — 2026-03-20
 
 ### First PyPI Release

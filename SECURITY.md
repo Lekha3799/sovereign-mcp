@@ -2,8 +2,9 @@
 
 ## Supported Versions
 
-| Version | Supported |
-|---------|-----------|
+| Version | Supported  |
+|---------|------------|
+| 1.1.x   | ✅ Active  |
 | 1.0.x   | ✅ Active  |
 
 ## Security Properties
@@ -55,7 +56,7 @@ Sovereign MCP enforces the following security properties by architecture:
 | 8 (fresh sweep) | Mar 19, 2026 | 7    | 7          |
 | **Total** |              | **111**    | **111**    |
 
-All 27 source files have been read line-by-line across multiple independent audit passes. Zero known open bugs.
+All 28 source files have been read line-by-line across multiple independent audit passes. Zero known open bugs.
 
 ## Reporting Vulnerabilities
 
@@ -95,3 +96,9 @@ The `freeze()` function allocates **entire memory pages** from the OS (typically
 If neither the C extension nor ctypes works, the system falls back to **Python-level protection only** (`FrozenNamespace` metaclass) — which is still strong but doesn't have the hardware-fault guarantee.
 
 **Real-world risk: None in standard deployments.** The primary security comes from `FrozenNamespace` (Python-level immutability) + `hmac.compare_digest()` (constant-time hashes). Hardware memory protection is an extra hardening layer on top.
+
+### 4. Sidecar proxy listens on localhost by default
+
+The sidecar proxy (`sidecar.py`) exposes security endpoints over HTTP (not HTTPS). By default it binds to `127.0.0.1:9090` (localhost only). If deployed with `--host 0.0.0.0`, it will accept connections from any network interface **without authentication or encryption**.
+
+**Mitigation:** In production, run the sidecar behind a reverse proxy (nginx, Caddy) with TLS termination, or use Docker/Kubernetes network policies to restrict access. The sidecar is designed for same-machine or same-pod communication.

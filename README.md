@@ -585,6 +585,55 @@ Every component in the decision path:
 | `truth_guard.py` | Hallucination detection. Tracks verification tool usage, blocks unverified factual claims. SQLite cache. | ~470 |
 | `conscience.py` | Ethical evaluation engine. Multi-factor harm assessment with configurable thresholds. | ~240 |
 | `siem_logger.py` | Structured security event logging. CEF/JSON output for Splunk, Elastic, QRadar. 17 event types. | ~235 |
+| `sidecar.py` | REST proxy server. Exposes all security modules as HTTP endpoints for any language. | ~200 |
+
+---
+
+## Sidecar Proxy (Language-Agnostic Integration)
+
+The sidecar proxy exposes sovereign-mcp security modules as REST endpoints. Any MCP server in any language (Node.js, Go, Rust, Python) can call these endpoints over HTTP.
+
+**Install and run:**
+
+```bash
+pip install sovereign-mcp[sidecar]
+python -m sovereign_mcp.sidecar --port 9090
+```
+
+**Endpoints:**
+
+| Endpoint | Method | Purpose |
+| -------- | ------ | ------- |
+| `/health` | GET | Liveness check, version, uptime |
+| `/filter-input` | POST | 9-layer input sanitization |
+| `/scan-deception` | POST | Prompt injection detection |
+| `/scan-pii` | POST | PII/sensitive data detection |
+| `/check-content` | POST | Toxic/harmful content check |
+| `/verify-output` | POST | Schema validation for tool outputs |
+| `/evaluate-ethics` | POST | Ethical action evaluation |
+
+**Usage from any language:**
+
+```javascript
+// Node.js example
+const resp = await fetch("http://localhost:9090/filter-input", {
+  method: "POST",
+  headers: {"Content-Type": "application/json"},
+  body: JSON.stringify({text: userInput})
+});
+const {safe, reason} = await resp.json();
+if (!safe) throw new Error(`Blocked: ${reason}`);
+```
+
+```bash
+# curl example
+curl -X POST http://localhost:9090/scan-pii \
+  -H "Content-Type: application/json" \
+  -d '{"text": "My SSN is 123-45-6789"}'
+# → {"safe": false, "reason": "1 PII item(s) found.", ...}
+```
+
+Auto-generated API docs available at `http://localhost:9090/docs`.
 
 ---
 
@@ -592,6 +641,12 @@ Every component in the decision path:
 
 ```bash
 pip install sovereign-mcp
+```
+
+**Optional: Sidecar proxy (for non-Python MCP servers):**
+
+```bash
+pip install sovereign-mcp[sidecar]
 ```
 
 **Optional: Build the C extension for hardware memory protection:**

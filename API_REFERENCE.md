@@ -40,6 +40,7 @@ This document describes **every module, every class, every function, and every d
 30. [Truth Guard (`truth_guard.py`)](#30-truth-guard)
 31. [Conscience (`conscience.py`)](#31-conscience)
 32. [SIEM Logger (`siem_logger.py`)](#32-siem-logger)
+33. [Sidecar Proxy (`sidecar.py`)](#33-sidecar-proxy)
 
 ---
 
@@ -164,6 +165,7 @@ Layer A of the verification chain. This is the first check that tool output pass
 **`validate_input(input_data, frozen_schema)`** — Same logic, applied to input parameters before tool execution.
 
 **`_validate_field(field_name, value, field_schema)`** — The core validation engine. Handles:
+
 - **Type checking:** Maps schema types (`"string"`, `"integer"`, `"number"`, `"boolean"`, `"array"`, `"object"`) to Python types.
 - **Numeric constraints:** `min`, `max` for numbers. Explicitly rejects `NaN` and `Infinity` — this is a security fix (Bug M-06) because `NaN` comparisons in Python always return `False`, meaning `NaN > max` would silently pass, allowing unlimited values.
 - **String constraints:** `min_length`, `max_length`, `pattern` (regex matching with ReDoS protection — patterns are tested against a timeout), `enum` (value must be one of a fixed set), `alpha_only` (letters only, no injection characters).
@@ -204,7 +206,7 @@ All patterns are pre-compiled at module load (not at call time) and stored as a 
 
 Part of the 13 Audit Checks (Check 4). Scans tool output for personally identifiable information and sensitive data before it enters the LLM context. This prevents scenarios where a database tool returns raw customer data including SSNs, credit cards, or API keys.
 
-### Pattern Categories
+### PII Pattern Categories
 
 17 patterns in total, all compiled via a factory function `_compile_pii_patterns()` that returns an immutable tuple directly — eliminating the mutable list window during module load. The factory function is deleted from the module namespace after use to prevent re-invocation:
 
@@ -238,7 +240,7 @@ The `HIGH_SENSITIVITY` set marks patterns that should always be flagged: SSNs, c
 
 Part of the 13 Audit Checks (Check 10). Separate from deception detection (which targets prompt injection) and PII detection (which targets data leaks). Content Safety targets **harmful, violent, illegal, or otherwise unsafe content** in tool output.
 
-### Pattern Categories
+### Content Safety Pattern Categories
 
 16 patterns covering:
 
@@ -392,6 +394,7 @@ Part of the 13 Audit Checks (Check 9). Verifies that the **caller** (agent, user
 **`freeze()`** — Converts `self._identities` from a regular dict to `types.MappingProxyType` — Python's built-in read-only dict wrapper. After this, no new identities can be injected.
 
 **`verify(identity_id, token, tool_name)`** — Three-step verification:
+
 1. Does the identity exist? (Unknown → decline)
 2. Does the token hash match? Uses `hmac.compare_digest()` for constant-time comparison — prevents timing attacks that could brute-force tokens by measuring response time.
 3. Is this identity authorized for this specific tool? (If `allowed_tools` is set and the tool isn't in the list → decline)
@@ -422,6 +425,7 @@ Part of the 13 Audit Checks (Check 12). Unlike the Schema Validator (which **rej
 ### `InputSanitizer` Class
 
 **`sanitize_string(value, mode)`** — Three modes:
+
 - `"minimal"` — Only removes null bytes and zero-width chars
 - `"standard"` (default) — Also removes SQL injection, HTML/script tags, event handlers, path traversal, double encoding
 - `"strict"` — Everything in standard + shell metacharacters
@@ -463,6 +467,7 @@ Part of the 13 Audit Checks (Check 8). Enforces per-tool rate limits using a sli
 **`__init__()`** — Creates `self._calls = {}` (tool_name → deque of timestamps) and a `threading.Lock()` for thread safety.
 
 **`check(tool_name, max_per_minute, max_per_hour)`** — Records the current timestamp and checks:
+
 1. Count calls in the last 60 seconds vs `max_per_minute`
 2. Count calls in the last 3600 seconds vs `max_per_hour`
 3. If either limit is exceeded → decline
@@ -484,6 +489,7 @@ Countermeasure 1 from the architecture doc. Hard numeric limits per action param
 ### `ValueConstraintChecker` Class
 
 **`check(params, constraints)`** — For each constrained parameter:
+
 1. Skip if the parameter isn't in the input (missing params aren't violations)
 2. Skip non-numeric values and booleans (booleans are technically `int` subclasses in Python)
 3. **Reject `NaN` and `Infinity`** — `NaN > max` is always `False` in Python, meaning NaN would silently bypass all max checks. This is Bug M-06.
@@ -503,6 +509,7 @@ Countermeasure 3. Above a frozen value threshold, require human approval before 
 ### `HumanApprovalChecker` Class
 
 **`check(params, approval_thresholds)`** — For each parameter with an approval threshold:
+
 1. **Reject NaN/Infinity** — NaN > auto_max is always False, meaning NaN would silently auto-approve any amount.
 2. If `value > auto_approve_max` → generate a unique `pending_id`, store a `PendingApproval` record, return `(False, reason, pending_id)`.
 3. If no thresholds defined or all values within limits → `(True, reason, None)`.
@@ -551,6 +558,7 @@ Part of Phase 7: Incident Response Pipeline. Every verification decision and eve
 **`log_verification(tool_name, accepted, layer, latency_ms, reason)`** — Logs every verification result, both accepts and declines. This creates a complete audit trail of all tool interactions.
 
 **`_append(entry)`** — The hash-chaining core. Thread-safe (via `threading.Lock()`):
+
 1. Sets `entry["previous_hash"]` to `self._last_hash` (chain link)
 2. Serializes the entry to canonical JSON (sorted keys, compact separators)
 3. Computes SHA-256 of the serialized entry → `entry["entry_hash"]`
@@ -558,6 +566,7 @@ Part of Phase 7: Incident Response Pipeline. Every verification decision and eve
 5. If a log file is configured, **re-serializes** the entry with the `entry_hash` included and appends to the file. The re-serialization is important — the file must contain self-verifiable entries.
 
 **`verify_chain()`** — Walks the entire entry list, verifying two things for each entry:
+
 1. The `previous_hash` matches the `entry_hash` of the previous entry (chain continuity)
 2. The `entry_hash` matches a recomputed hash of the entry's content (entry integrity)
 
@@ -580,6 +589,7 @@ Uses `__slots__` for memory efficiency. Stores: `incident_id` (UUID), `severity`
 ### `IncidentResponder` Class
 
 **Classification Map (`SEVERITY_MAP`)** — Maps verification layer names to severity levels:
+
 - `layer_d_behavioral` → CRITICAL
 - `layer_c_consensus`, `pii_detection`, `content_safety`, `identity_check`, `hallucination` → HIGH
 - `layer_b_deception`, `rate_limit`, `domain_check` → MEDIUM
@@ -590,6 +600,7 @@ Unknown layers default to HIGH (fail-safe).
 **`__init__(alert_callback, escalation_threshold, auto_quarantine_on_critical)`** — `alert_callback` is a callable that receives an incident dict (for PagerDuty, Slack, email, etc.). `escalation_threshold` (default 5) is how many MEDIUM incidents before auto-escalation to HIGH. `auto_quarantine_on_critical` (default True) auto-quarantines tools on CRITICAL incidents.
 
 **`report(tool_name, layer, reason, forensic_data)`** — Stages 1+2+3 combined:
+
 1. **Detection** — Incident has been caught (by OutputGate)
 2. **Classification** — Look up severity from `SEVERITY_MAP`. If the tool has accumulated ≥ `escalation_threshold` MEDIUM incidents, escalate to HIGH. The count check and increment are inside the lock to prevent TOCTOU race conditions (Bug M-13).
 3. **Forensic Capture** — Store all context in an `Incident` object.
@@ -597,6 +608,7 @@ Unknown layers default to HIGH (fail-safe).
 Then calls `_respond()` for Stage 4.
 
 **`_respond(incident)`** — Stage 4: Automated response based on severity:
+
 - **CRITICAL** — Quarantine tool + send alert + recommend process quarantine
 - **HIGH** — Quarantine tool + send alert + flag for investigation
 - **MEDIUM** — Log pattern (escalation already handled)
@@ -631,6 +643,7 @@ Status progression: `DISCOVERED` → `VALIDATED` → `APPROVED` → `EXPORTED` (
 **`discover(tool_name, tool_definition)`** — Stage 1. Places a new tool in the sandbox. Returns a sandbox ID for tracking.
 
 **`validate(tool_name)`** — Stage 2. Runs 6 validation checks:
+
 1. Capabilities count ≤ `max_capabilities` (default 20)
 2. No blocked capabilities (e.g., `admin`, `sudo`, `root`)
 3. Input schema present (if required by policy)
@@ -665,6 +678,7 @@ Result of comparing v1 and v2 tool definitions. Tracks: `changes` (list of descr
 ### `ToolUpdater` Class
 
 **`analyze_update(v1_definition, v2_definition)`** — Comprehensive diff analysis:
+
 - **Capabilities added** → requires manual approval (capability expansion = new attack surface)
 - **Capabilities removed** → safe, can auto-approve
 - **Output schema fields added/removed** → requires manual approval
@@ -704,6 +718,7 @@ Enforces **mutual TLS (mTLS)** for all network MCP connections. The CA certifica
 **`verify_ca_integrity()`** — Re-reads the CA cert file from disk and compares its hash to the frozen hash using `hmac.compare_digest()`. Detects post-freeze tampering.
 
 **`create_client_context()`** — Creates an `ssl.SSLContext` for outgoing connections:
+
 - TLS 1.2 minimum
 - Server certificate validated against frozen CA
 - Client certificate presented for mutual authentication
@@ -711,11 +726,13 @@ Enforces **mutual TLS (mTLS)** for all network MCP connections. The CA certifica
 - No fallback to unencrypted
 
 **`create_server_context(server_cert_path, server_key_path)`** — Creates an `ssl.SSLContext` for incoming connections:
+
 - TLS 1.2 minimum
 - Client certificate validated against frozen CA (mutual TLS)
 - `CERT_REQUIRED` (not optional — no fallback)
 
 **`validate_connection(ssl_socket)`** — Validates an established SSL connection:
+
 1. Peer certificate must be present (mutual TLS)
 2. Certificate serial number not in revocation list
 3. TLS version is ≥ 1.2
@@ -730,6 +747,7 @@ Enforces **mutual TLS (mTLS)** for all network MCP connections. The CA certifica
 **`revoke_certificate(serial_number)`** — Allows post-freeze certificate revocation without a process restart. The revocation list is append-only by design — revocations can be added but never removed. Returns `(success, reason)`.
 
 **`enforce_policy(connection_type, ssl_socket)`** — The enforcement entry point:
+
 - Local → allowed without encryption
 - Network without frozen transport → CONNECTION REFUSED
 - Network without SSL socket → CONNECTION REFUSED (no fallback to plain TCP)
@@ -762,6 +780,7 @@ The hardware memory protection layer. This C extension allocates **dedicated mem
 A custom Python type (not instantiable from Python — `tp_new = NULL`). Only `freeze()` can create instances.
 
 Properties:
+
 - **`data`** — Returns a copy of the frozen bytes (via `PyBytes_FromStringAndSize()`). This is a copy, not a reference — the original memory stays behind the read-only protection.
 - **`size`** — Data size in bytes.
 - **`protected`** — Whether the memory page is currently read-only.
@@ -771,6 +790,7 @@ Deallocation (`FrozenBuffer_dealloc()`): unprotects the page, secure-wipes it, t
 ### Module Functions
 
 **`freeze(data: bytes) -> FrozenBuffer`** — The main entry point:
+
 1. Calculate page-aligned allocation size (round up to next page boundary)
 2. Allocate the page(s)
 3. Copy data into the page
@@ -804,7 +824,7 @@ On Unix (Linux/macOS), loads libc via `ctypes.util.find_library("c")` and wraps 
 
 Uses `__slots__` for efficiency. Has `data`, `size`, and `protected` properties matching the C extension's API exactly. The `__del__` method guards against interpreter shutdown (ctypes may be unavailable during garbage collection at exit).
 
-### Public Functions
+### Fallback Public Functions
 
 **`freeze(data)`**, **`verify(buffer, expected_hash)`**, **`is_protected(buffer)`**, **`destroy(buffer)`**, **`page_size()`** — All mirror the C extension API exactly. The `verify()` function uses `hmac.compare_digest()` for constant-time comparison. The `destroy()` function follows the same secure pattern: unprotect → zero via `ctypes.memset()` → free.
 
@@ -821,6 +841,7 @@ Auto-loading wrapper that provides a unified API regardless of which backend is 
 ### Loading Logic
 
 Three-tier fallback:
+
 1. Try to import the C extension (`frozen_memory`) → `BACKEND = "c_extension"` (most secure)
 2. If that fails, try the ctypes fallback (`frozen_memory_fallback`) → `BACKEND = "ctypes_fallback"` (still OS-level protection)
 3. If both fail → `BACKEND = "none"` + warning (Python-level `FrozenNamespace` protection only)
@@ -871,23 +892,23 @@ Every input passes through these layers **in order**, stopping at the first bloc
 
 3. **Entropy/gibberish detection** -- Catches Base64 payloads (low space ratio + Base64 signature characters or trailing `=`), hex-with-spaces encoding, and low-vowel/low-space gibberish. URL text is excluded from analysis to prevent false positives on legitimate links.
 
-3.5. **Repetition flood detection** -- Blocks single-character floods (50+ identical chars) and word repetition attacks (same word 10+ times, >60% of content).
+- **Step 3.5: Repetition flood detection** -- Blocks single-character floods (50+ identical chars) and word repetition attacks (same word 10+ times, >60% of content).
 
-4. **Raw escape sequence injection** -- Pre-compiled regex blocks `\uNNNN` and `\xNN` patterns that attempt to smuggle characters past normalization.
+- **Step 4: Raw escape sequence injection** -- Pre-compiled regex blocks `\uNNNN` and `\xNN` patterns that attempt to smuggle characters past normalization.
 
-5. **LLM structural token injection** -- Blocks ChatML (`<|im_start|>`), LLaMA (`[INST]`), and Llama2 (`<<SYS>>`) structural tokens used in prompt injection.
+- **Step 5: LLM structural token injection** -- Blocks ChatML (`<|im_start|>`), LLaMA (`[INST]`), and Llama2 (`<<SYS>>`) structural tokens used in prompt injection.
 
-5.5. **Persona hijack / jailbreak detection** -- Single-match regex catches DAN, "Do Anything Now", evil AI persona, developer mode, and content filter bypass patterns. One match is enough to block.
+- **Step 5.5: Persona hijack / jailbreak detection** -- Single-match regex catches DAN, "Do Anything Now", evil AI persona, developer mode, and content filter bypass patterns. One match is enough to block.
 
-6. **Keyword injection detection** -- Two tiers:
-   - **6a: High-confidence single-match** -- `IGNORE PREVIOUS`, `IGNORE ALL INSTRUCTIONS`, `DISREGARD ALL INSTRUCTIONS`, `OVERRIDE SYSTEM PROMPT`, `NEW SYSTEM PROMPT` trigger on a single hit.
-   - **6b: Standard 2+ threshold** -- Requires 2+ distinct bad-signal matches. The `DEFAULT_BAD_SIGNALS` list includes 120+ English keywords plus translations in 15 languages (Spanish, French, German, Portuguese, Chinese, Japanese, Korean, Russian, Arabic, Hindi, Italian, Dutch, Swedish, Norwegian, Finnish, Polish, Czech, Ukrainian, Turkish, Danish, Greek).
+- **Step 6: Keyword injection detection** -- Two tiers:
+  - **6a: High-confidence single-match** -- `IGNORE PREVIOUS`, `IGNORE ALL INSTRUCTIONS`, `DISREGARD ALL INSTRUCTIONS`, `OVERRIDE SYSTEM PROMPT`, `NEW SYSTEM PROMPT` trigger on a single hit.
+  - **6b: Standard 2+ threshold** -- Requires 2+ distinct bad-signal matches. The `DEFAULT_BAD_SIGNALS` list includes 120+ English keywords plus translations in 15 languages (Spanish, French, German, Portuguese, Chinese, Japanese, Korean, Russian, Arabic, Hindi, Italian, Dutch, Swedish, Norwegian, Finnish, Polish, Czech, Ukrainian, Turkish, Danish, Greek).
 
-6.5. **Word-level co-occurrence** -- Instead of requiring exact multi-word phrases, detects when ACTION verbs (`OVERRIDE`, `DISABLE`, `IGNORE`, etc. -- 31 verbs including multilingual) co-occur with TARGET nouns (`SAFETY`, `SECURITY`, `PROTOCOLS`, etc. -- 26 nouns including multilingual). Defeats word-insertion bypass.
+- **Step 6.5: Word-level co-occurrence** -- Instead of requiring exact multi-word phrases, detects when ACTION verbs (`OVERRIDE`, `DISABLE`, `IGNORE`, etc. -- 31 verbs including multilingual) co-occur with TARGET nouns (`SAFETY`, `SECURITY`, `PROTOCOLS`, etc. -- 26 nouns including multilingual). Defeats word-insertion bypass.
 
-6.7. **Multi-decode expansion** -- Generates 5 decoded variants of the input (ROT13, reversed, leet-speak normalized, whitespace-collapsed, pig latin stripped) and re-runs keyword + co-occurrence detection on each variant.
+- **Step 6.7: Multi-decode expansion** -- Generates 5 decoded variants of the input (ROT13, reversed, leet-speak normalized, whitespace-collapsed, pig latin stripped) and re-runs keyword + co-occurrence detection on each variant.
 
-7. **Safe keyword bypass** -- Optional list of keywords that auto-pass safety checks for internal tool invocations.
+- **Step 7: Safe keyword bypass** -- Optional list of keywords that auto-pass safety checks for internal tool invocations.
 
 ### `InputFilter` Class
 
@@ -1072,6 +1093,70 @@ CEF-standard 1-10 scale with named constants: `INFO` (1), `LOW` (3), `MEDIUM` (5
 
 ---
 
+## 33. Sidecar Proxy
+
+**File:** `sovereign_mcp/sidecar.py` (~200 lines)
+
+This module is a **FastAPI application** that exposes sovereign-mcp's security modules as REST endpoints. It exists so that MCP servers written in **any language** (Node.js, Go, Rust, Java) can call sovereign-mcp's verification endpoints over HTTP without needing a Python runtime in their own process.
+
+### Architecture
+
+The sidecar runs as a separate process alongside the MCP server. It's not a middleware or a proxy that intercepts traffic — it's a passive service that waits for requests. The MCP server (or a wrapper around it) sends outputs to the sidecar for verification before trusting them. This is the standard sidecar pattern used in microservices architectures.
+
+### Installation & CLI
+
+```bash
+pip install sovereign-mcp[sidecar]
+python -m sovereign_mcp.sidecar --port 9090 --host 0.0.0.0 --log-level info
+```
+
+The `[sidecar]` extra installs `fastapi` and `uvicorn`. The core `sovereign-mcp` package has **zero external dependencies** — the sidecar deps are strictly optional.
+
+### Request/Response Models
+
+**`TextRequest`** — Used by `/filter-input`, `/scan-deception`, `/scan-pii`, `/check-content`. Single field: `text` (string).
+
+**`SchemaRequest`** — Used by `/verify-output`. Fields: `data` (dict), `schema` (dict).
+
+**`EthicsRequest`** — Used by `/evaluate-ethics`. Fields: `action` (string), `context` (string).
+
+**`ScanResult`** — Returned by all POST endpoints. Fields: `safe` (bool), `reason` (string), `details` (optional dict), `latency_ms` (float).
+
+### Endpoints
+
+**`GET /health`** — Returns server status, version, uptime in seconds, and list of loaded modules. No authentication required.
+
+**`POST /filter-input`** — Runs `InputFilter.filter()` on the input text. Returns `safe=True` if the input passes all 9 filter layers, `safe=False` with the rejection reason if blocked. The `details` field contains `cleaned_text` (the sanitized version of the input).
+
+**`POST /scan-deception`** — Runs `DeceptionDetector.scan()`. Returns `safe=True` if no prompt injection patterns are found, `safe=False` with the number of patterns detected.
+
+**`POST /scan-pii`** — Runs `PIIDetector.scan()`. Returns `safe=True` if no PII is found, `safe=False` with the number of PII items detected. Details include redacted match info (first 4 + last 2 characters only).
+
+**`POST /check-content`** — Runs `ContentSafety.scan()`. Returns `safe=True` if no harmful content is found, `safe=False` with the number of unsafe patterns detected.
+
+**`POST /verify-output`** — Runs `SchemaValidator.validate_output()` against the provided schema. Returns `safe=True` if the data conforms, `safe=False` with specific validation errors.
+
+**`POST /evaluate-ethics`** — Runs `Conscience.evaluate()` on the action + context. Returns `safe=True` if the action is ethically approved, `safe=False` if it violates harm reduction directives.
+
+### Sidecar Integration Example
+
+```javascript
+// Node.js MCP server calling the sidecar
+const check = await fetch("http://localhost:9090/filter-input", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ text: userInput }),
+});
+const { safe, reason } = await check.json();
+if (!safe) return { error: `Blocked: ${reason}` };
+```
+
+### Auto-Generated Docs
+
+FastAPI provides Swagger UI at `/docs` and ReDoc at `/redoc` automatically.
+
+---
+
 ## Architecture Summary
 
 The entire codebase follows a consistent set of design principles:
@@ -1092,6 +1177,8 @@ The entire codebase follows a consistent set of design principles:
 
 8. **Self-improvement** -- Adaptive Shield learns from missed attacks and self-prunes on false positives. Truth Guard builds a verified fact cache over time. Both use local SQLite with zero cloud dependencies.
 
+9. **Language-agnostic integration** -- The sidecar proxy exposes all security modules as REST endpoints, allowing any MCP server (regardless of implementation language) to integrate with sovereign-mcp over HTTP.
+
 ---
 
-*Total codebase: 32 modules, ~7,600 lines of Python + 418 lines of C. Zero external dependencies (stdlib only).*
+*Total codebase: 33 modules, ~7,800 lines of Python + 418 lines of C. Core package: zero external dependencies (stdlib only). Sidecar: optional FastAPI + uvicorn.*
